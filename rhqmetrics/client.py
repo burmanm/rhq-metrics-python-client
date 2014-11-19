@@ -12,7 +12,7 @@ class IdDataPoint:
         self.value = value # double
 
     def to_json(self):
-        return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
+        return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=2)
 """
 
 class RHQMetricsClient:
@@ -27,34 +27,46 @@ class RHQMetricsClient:
     Internal methods
     """
 
-    def __get_url(self, service):
-        return 'http://' + self.host + ':' + str(self.port) + '/rhq-metrics/' + service
+    def _get_url(self, service):
+        return "http://{0}:{1}/rhq-metrics/{2}".format(self.host, str(self.port), service)
 
-    def __time_millis(self):
+    def _time_millis(self):
         return int(round(time.time() * 1000))
 
-    def __post(self, url, json_data):
-        req = urllib2.Request(url=url, data=json_data)
-        req.add_header('Content-Type', 'application/json')
-        res = urllib2.urlopen(req)
+    def _post(self, url, json_data):
+        try:
+            req = urllib2.Request(url=url, data=json_data)
+            req.add_header('Content-Type', 'application/json')
+            res = urllib2.urlopen(req)
+
+            # Finally, close
+            res.close()
+
+        except HTTPError, e:
+            print "Response Code was: " + e.code
+
+        except URLError, e:
+            print "Error was: " + e.reason
 
     """
     External methods
     """
 
     def put_batch(self, datapoints):        
-        url = self.__get_url('metrics')
+        url = self._get_url('metrics')
         data = json.dumps(datapoints, indent=2)
 
+        """
         print url
         print json.dumps(datapoints, indent=2)
+        """
 
-        self.__post(url, data)
+        self._post(url, data)
 
     def put(self, id, value, timestamp=None):
 
         if timestamp is None:
-            timestamp = self.__time_millis()
+            timestamp = self._time_millis()
 
         item = { 'id': id,
                  'timestamp': timestamp,
