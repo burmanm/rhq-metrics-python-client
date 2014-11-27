@@ -3,25 +3,33 @@ import urllib2
 import httplib
 import time
 
-"""
-class IdDataPoint:
-
-    def __init__(self, id, timestamp, value):
-        self.id = id # string
-        self.timestamp = timestamp # long
-        self.value = value # double
-
-    def to_json(self):
-        return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=2)
-"""
-
 class RHQMetricsClient:
+    """
+    Creates new client for RHQ Metrics. If you intend to use the batching feature, remember to call
+    flush() on certain intervals to avoid data being stale on the client side for too long.
+    """
 
+    #last_sent = None
+    _batch = []
+    
     def __init__(self, 
                  host='localhost',
-                 port=8080):
+                 port=8080,
+                 batch_size=1):
+        """
+        A new instance of RHQMetricsClient is created with the following defaults:
+
+        host = localhost
+        port = 8080
+        batch_size = 1 (avoid batching)
+
+        The url that is called by default is:
+
+        http://{host}:{port}/rhq-metrics/
+        """
         self.host = host
         self.port = port
+        self.batch_size = batch_size
 
     """
     Internal methods
@@ -42,37 +50,56 @@ class RHQMetricsClient:
             # Finally, close
             res.close()
 
-        except HTTPError, e:
-            print "Response Code was: " + e.code
+        except urllib2.HTTPError, e:
+            print "Error, RHQ Metrics responded with http code: " + str(e.code)
 
-        except URLError, e:
-            print "Error was: " + e.reason
+        except urllib2.URLError, e:
+            print "Error, could not send event to RHQ Metrics: " + str(e.reason)
 
+            
     """
     External methods
     """
-
-    def put_batch(self, datapoints):        
-        url = self._get_url('metrics')
-        data = json.dumps(datapoints, indent=2)
-
+    def put(self, data):
         """
-        print url
-        print json.dumps(datapoints, indent=2)
+        Send datapoint(s) to the server.
+
+        data is a dict containing the keys: id, value, timestamp or a list
+        of such dicts
         """
+        if isinstance(data, list):
+            self._batch.extend(data)
+        else:
+            self._batch.append(data)
 
-        self._post(url, data)
-
-    def put(self, id, value, timestamp=None):
-
+        if len(self._batch) >= self.batch_size:
+            self.flush()
+        """
+        Allow setting maximum interval between flushes:
+          - set up a timer task that does self._flush() after X seconds
+            - recreate new one
+          - If a batch size is met, reset that timer
+        """
+        
+    def create(self, id, value, timestamp=None):
+        """
+        Creates new datapoint and sends to the server.
+        """
         if timestamp is None:
             timestamp = self._time_millis()
 
         item = { 'id': id,
                  'timestamp': timestamp,
-                 'value': value}
+                 'value': float(value)}
 
-        ls = []
-        ls.append(item)
+        self.put(item)
 
-        self.put_batch(ls)
+    def flush(self):
+        """
+        Flushes the internal batch queue to the server, regardless if the size limit has
+        been reached.
+        """
+        if len(self._batch) > 0:
+            json_data = json.dumps(self._batch, indent=2)
+            self._post(self._get_url('metrics'), json_data)
+            self._batch = []
