@@ -51,6 +51,10 @@ class MetricsTestCase(TestMetricFunctionsBase):
         # Insert multiple availability & numeric in the same call
         # Test fetching of the data
         pass
+
+    def test_tenant(self):
+        self.client.create_tenant('2')
+        self.client.create_tenant('3', availability='40', numeric='50')
         
 if __name__ == '__main__':
     unittest.main()

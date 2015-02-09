@@ -57,6 +57,9 @@ class RHQMetricsClient:
     Internal methods
     """
 
+    def _get_basic_url(self, service):        
+        return "http://{0}:{1}/rhq-metrics/{2}".format(self.host, str(self.port), service)
+    
     def _get_url(self, service):
         return "http://{0}:{1}/rhq-metrics/{2}/{3}".format(self.host, str(self.port), self.tenant_id, service)
 
@@ -65,13 +68,14 @@ class RHQMetricsClient:
 
     def _get_metrics_data_url(self, metric_type):
         return self._get_metrics_url(metric_type) + '/data'
+
+    def _get_tenants_url(self):
+        return self._get_basic_url('tenants')
     
     def _time_millis(self):
         return int(round(time.time() * 1000))
 
     def _post(self, url, json_data):
-        print url
-        
         try:
             req = urllib2.Request(url=url, data=json_data)
             req.add_header('Content-Type', 'application/json')
@@ -148,14 +152,6 @@ class RHQMetricsClient:
         else:
             metric_type = MetricType.Availability
             
-        # only str ("up", "down" and floats are allowed, rest should be converted)
-        # if isinstance(value, Availability):
-        #     value = str(value)
-        # elif isinstance(value, int):
-        #     value = float(value)
-        # elif isinstance(value, long):
-        #     value = float(value)
-            
         item = { 'timestamp': timestamp,
                  'value': value
         }
@@ -185,7 +181,32 @@ class RHQMetricsClient:
             
         metadata_url = self._get_url('metrics') + '?type=' + MetricType.short(query_type)
         return self._get(metadata_url)
-    
+
+    def query_tenants(self):
+        """
+        Query available tenants and their information.
+        """
+        tenants_url = self._get_url('tenants')
+        return self._get_tenants_url()
+
+    def create_tenant(self, tenant_id, **retentions):
+        """
+        Create a tenant. Give parameters availability and numeric to provide custom
+        retention times.
+        """        
+        avail_reten = retentions.get('availability')
+        num_reten = retentions.get('numeric')
+
+        item = { 'id': tenant_id }
+
+        if avail_reten is not None and num_reten is not None:
+            retens = { 'availability': avail_reten,
+                       'numeric': num_reten }
+            item['retentions'] = retens
+
+        tenants_url = self._get_tenants_url()
+        self._post(tenants_url, json.dumps(item, indent=2))
+        
     def _isfloat(self, value):
         try:
             float(value)
