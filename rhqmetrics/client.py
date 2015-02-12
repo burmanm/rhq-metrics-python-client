@@ -208,10 +208,10 @@ class RHQMetricsClient:
             **kwargs)
 
     def query_single_numeric(self, metric_id, **kwargs):
-        return get(MetricType.Numeric, metric_id, **kwargs)
+        return self.get(MetricType.Numeric, metric_id, **kwargs)
 
     def query_single_availability(self, metric_id, **kwargs):
-        return get(MetricType.Availability, metric_id, **kwargs)
+        return self.get(MetricType.Availability, metric_id, **kwargs)
     
     def query_metadata(self, query_type):
         """
