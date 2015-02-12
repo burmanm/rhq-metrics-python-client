@@ -18,23 +18,17 @@ class TenantTestCase(TestMetricFunctionsBase):
         tenant = str(uuid.uuid4())
         self.client.create_tenant(tenant)
         tenants = self.client.query_tenants()
-        for item in tenants:
-            if item['id'] == tenant:
-                return
-            
-        self.fail('Created tenant could not be found')
 
+        expect = { 'id': tenant, 'retentions': {} }
+        self.assertIn(expect, tenants)
+        
     def test_tenant_creation_with_retentions(self):
         tenant = str(uuid.uuid4())
         self.client.create_tenant(tenant, availability='40', numeric='50')
         tenants = self.client.query_tenants()
-        for item in tenants:
-            if item['id'] == tenant:
-                self.assertEquals(item['retentions']['availability'], 40)
-                self.assertEquals(item['retentions']['numeric'], 50)
-                return
 
-        self.fail('Created tenant could not be found')
+        expect = { 'id': tenant, 'retentions': { 'availability': 40, 'numeric': 50 } }
+        self.assertIn(expect, tenants)
         
 class MetricsTestCase(TestMetricFunctionsBase):
     """
@@ -67,23 +61,49 @@ class MetricsTestCase(TestMetricFunctionsBase):
         metric = float(4.35)
         self.client.push('test.numeric', metric)
         data = self.client.query_single_numeric('test.numeric')
-        self.assertEquals(float(data['data'][0]['value']), metric)
+        self.assertEqual(float(data['data'][0]['value']), metric)
 
     def test_add_availability_single(self):
         self.client.push('test.avail.1', Availability.Up)
         self.client.push('test.avail.2', 'down')
 
         up = self.client.query_single_availability('test.avail.1')
-        self.assertEquals(up['data'][0]['value'], 'up')
+        self.assertEqual(up['data'][0]['value'], 'up')
         
         down = self.client.query_single_availability('test.avail.2')
-        self.assertEquals(down['data'][0]['value'], 'down')
+        self.assertEqual(down['data'][0]['value'], 'down')
 
     def test_add_numeric_multi(self):
-        self.fail('Not implemented')
+        metric1 = self.client.create_metric(float(1.45))
+        metric2 = self.client.create_metric(float(2.00), '1423734467561')
+
+        batch = []
+        batch.append(metric1)
+        batch.append(metric2)
+
+        self.client.put(MetricType.Numeric, 'test.numeric.multi', batch)
+        data = self.client.query_single_numeric('test.numeric.multi')
+
+        datad = data['data']
+        self.assertEqual(len(datad), 2)
+        self.assertEqual(datad[0]['value'], float(1.45))
+        self.assertEqual(datad[1]['value'], float(2.00))
 
     def test_add_availability_multi(self):
-        self.fail('Not implemented')
+        up = self.client.create_metric('up', '1423734467561')
+        down = self.client.create_metric('down')
+
+        batch = []
+        batch.append(up)
+        batch.append(down)
+
+        self.client.put(MetricType.Availability, 'test.avail.multi', batch)
+        data = self.client.query_single_availability('test.avail.multi')
+
+        datad = data['data']
+        self.assertEqual(len(datad), 2)
+        self.assertEqual(datad[0]['value'], 'down')
+        self.assertEqual(datad[1]['value'], 'up')
         
 if __name__ == '__main__':
     unittest.main()

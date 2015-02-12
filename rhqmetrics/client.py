@@ -170,20 +170,24 @@ class RHQMetricsClient:
         This method is assisting the put method by trying to detect what sort of
         metric type is sent, as well as generating a timestamp.
         """
-        if timestamp is None:
-            timestamp = self._time_millis()
-
         if self._isfloat(value):
             metric_type = MetricType.Numeric
         else:
             metric_type = MetricType.Availability
-            
-        item = { 'timestamp': timestamp,
-                 'value': value
-        }
+
+        item = self.create_metric(value, timestamp)
 
         self.put(metric_type, metric_id, item)
 
+    def create_metric(self, value, timestamp=None):
+        if timestamp is None:
+            timestamp = self._time_millis()
+
+        item = { 'timestamp': timestamp,
+                 'value': value }
+
+        return item
+        
     def flush(self):
         """
         Flushes the internal batch queue to the server, regardless if the size limit has
