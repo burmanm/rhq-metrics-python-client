@@ -1,7 +1,12 @@
 import json
 import urllib2
+import urllib
 import httplib
 import time
+
+"""
+TODO: Remember to do imports for Python 3 also and check the compatibility..
+"""
 
 class MetricType:
     Numeric = 'numeric'
@@ -66,8 +71,11 @@ class RHQMetricsClient:
     def _get_metrics_url(self, metric_type):
         return self._get_url('metrics') + "/{0}".format(metric_type)
 
-    def _get_metrics_data_url(self, metric_type):
-        return self._get_metrics_url(metric_type) + '/data'
+    def _get_metrics_single_url(self, metric_type, metric_id):
+        return self._get_metrics_url(metric_type) + '/{0}'.format(metric_id)
+    
+    def _get_metrics_data_url(self, metrics_url):
+        return metrics_url + '/data'
 
     def _get_tenants_url(self):
         return self._get_basic_url('tenants')
@@ -90,9 +98,13 @@ class RHQMetricsClient:
         except urllib2.URLError, e:
             print "Error, could not send event to RHQ Metrics: " + str(e.reason)
 
-    def _get(self, url):
+    def _get(self, url, **kwargs):
         try:
-            req = urllib2.Request(url=url)
+            params = urllib.urlencode(kwargs)
+            if len(params) > 0:
+                url = url + params
+
+            req = urllib2.Request(url)                
             req.add_header('Content-Type', 'application/json')
             res = urllib2.urlopen(req)        
             data = json.load(res)
@@ -106,15 +118,26 @@ class RHQMetricsClient:
         except urllib2.URLError, e:
             print "Error, could not send event to RHQ Metrics: " + str(e.reason)
 
+    def _isfloat(self, value):
+        try:
+            float(value)
+            return True
+        except ValueError:
+            return False
             
     """
     External methods
     """
+    
+    """
+    Metrics related methods
+    """
+
     def put(self, metric_type, metric_id, data):
         """
         Send datapoint(s) to the server.
 
-        data is a dict containing the keys: id, value, timestamp or a list
+        data is a dict containing the keys: value, timestamp or a list
         of such dicts
         """
         if isinstance(data, list):
@@ -130,7 +153,7 @@ class RHQMetricsClient:
 
         post_dict = [{ 'name': metric_id, 'data': batch }]        
         json_data = json.dumps(post_dict, indent=2)
-        self._post(self._get_metrics_data_url(metric_type), json_data)
+        self._post(self._get_metrics_data_url(self._get_metrics_url(metric_type)), json_data)
         """
         Allow setting maximum interval between flushes:
           - set up a timer task that does self._flush() after X seconds
@@ -143,6 +166,9 @@ class RHQMetricsClient:
         Creates new datapoint and sends to the server. Value should be
         type of "Availability" or "up", "down" for availability metrics and otherwise
         a float type of for numerical values.
+
+        This method is assisting the put method by trying to detect what sort of
+        metric type is sent, as well as generating a timestamp.
         """
         if timestamp is None:
             timestamp = self._time_millis()
@@ -171,7 +197,22 @@ class RHQMetricsClient:
             self._post(self._get_metrics(MetricType.Numeric), json_data)
             self._batch = []
         """
-        
+
+    def get(self, metric_type, metric_id, **kwargs):
+        """
+        Supported arguments are [optional]: start, end and buckets
+        """
+        return self._get(
+            self._get_metrics_data_url(
+                self._get_metrics_single_url(metric_type, metric_id)),
+            **kwargs)
+
+    def query_single_numeric(self, metric_id, **kwargs):
+        return get(MetricType.Numeric, metric_id, **kwargs)
+
+    def query_single_availability(self, metric_id, **kwargs):
+        return get(MetricType.Availability, metric_id, **kwargs)
+    
     def query_metadata(self, query_type):
         """
         Query available metric metadata. Use 'avail' or 'num' or MetricType.Availability / MetricType.Numeric
@@ -182,12 +223,16 @@ class RHQMetricsClient:
         metadata_url = self._get_url('metrics') + '?type=' + MetricType.short(query_type)
         return self._get(metadata_url)
 
+
+    """
+    Tenant related queries
+    """
+    
     def query_tenants(self):
         """
         Query available tenants and their information.
         """
-        tenants_url = self._get_url('tenants')
-        return self._get_tenants_url()
+        return self._get(self._get_tenants_url())
 
     def create_tenant(self, tenant_id, **retentions):
         """
@@ -207,9 +252,3 @@ class RHQMetricsClient:
         tenants_url = self._get_tenants_url()
         self._post(tenants_url, json.dumps(item, indent=2))
         
-    def _isfloat(self, value):
-        try:
-            float(value)
-            return True
-        except ValueError:
-            return False
