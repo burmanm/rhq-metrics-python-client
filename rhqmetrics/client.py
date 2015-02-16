@@ -23,6 +23,12 @@ class Availability:
     Down = 'down'
     Up = 'up'
 
+class RHQMetricsError(urllib2.HTTPError):
+    pass
+
+class RHQMetricsConnectionError(urllib2.URLError):
+    pass
+    
 class RHQMetricsClient:
     """
     Creates new client for RHQ Metrics. If you intend to use the batching feature, remember to call
@@ -33,9 +39,6 @@ class RHQMetricsClient:
     Availability data and numeric data can't be posted in the same call anymore..
     So they should be separated
     """
-    
-    #last_sent = None
-    _batch = []
     
     def __init__(self,
                  tenant_id,
@@ -62,11 +65,11 @@ class RHQMetricsClient:
     Internal methods
     """
 
-    def _get_basic_url(self, service):        
-        return "http://{0}:{1}/rhq-metrics/{2}".format(self.host, str(self.port), service)
+    def _get_base_url(self):
+        return "http://{0}:{1}/rhq-metrics/".format(self.host, str(self.port))
     
     def _get_url(self, service):
-        return "http://{0}:{1}/rhq-metrics/{2}/{3}".format(self.host, str(self.port), self.tenant_id, service)
+        return self._get_base_url() + '{0}/{1}'.format(self.tenant_id, service)
 
     def _get_metrics_url(self, metric_type):
         return self._get_url('metrics') + "/{0}".format(metric_type)
@@ -78,7 +81,7 @@ class RHQMetricsClient:
         return metrics_url + '/data'
 
     def _get_tenants_url(self):
-        return self._get_basic_url('tenants')
+        return self._get_base_url() + 'tenants'
     
     def _time_millis(self):
         return int(round(time.time() * 1000))
@@ -94,13 +97,15 @@ class RHQMetricsClient:
 
         except urllib2.HTTPError, e:
             print "Error, RHQ Metrics responded with http code: " + str(e.code)
+            raise RHQMetricsError(e)
 
         except urllib2.URLError, e:
-            print "Error, could not send event to RHQ Metrics: " + str(e.reason)
+            print"Error, could not send event(s) to the RHQ Metrics: " + str(e.reason)
+            raise RHQMetricsConnectionError(e)
 
-    def _get(self, url, **kwargs):
+    def _get(self, url, **url_params):
         try:
-            params = urllib.urlencode(kwargs)
+            params = urllib.urlencode(url_params)
             if len(params) > 0:
                 url = url + params
 
@@ -114,9 +119,11 @@ class RHQMetricsClient:
         
         except urllib2.HTTPError, e:
             print "Error, RHQ Metrics responded with http code: " + str(e.code)
+            raise RHQMetricsError(e)
 
         except urllib2.URLError, e:
-            print "Error, could not send event to RHQ Metrics: " + str(e.reason)
+            print"Error, could not send event(s) to the RHQ Metrics: " + str(e.reason)
+            raise RHQMetricsConnectionError(e)
 
     def _isfloat(self, value):
         try:
@@ -148,9 +155,6 @@ class RHQMetricsClient:
             batch.append(data)
             # self._batch.append(data)
 
-        # if len(self._batch) >= self.batch_size:
-        #     self.flush()
-
         post_dict = [{ 'name': metric_id, 'data': batch }]        
         json_data = json.dumps(post_dict, indent=2)
         self._post(self._get_metrics_data_url(self._get_metrics_url(metric_type)), json_data)
@@ -175,11 +179,11 @@ class RHQMetricsClient:
         else:
             metric_type = MetricType.Availability
 
-        item = self.create_metric(value, timestamp)
+        item = self.create_metric_dict(value, timestamp)
 
         self.put(metric_type, metric_id, item)
 
-    def create_metric(self, value, timestamp=None):
+    def create_metric_dict(self, value, timestamp=None):
         if timestamp is None:
             timestamp = self._time_millis()
 
@@ -188,34 +192,20 @@ class RHQMetricsClient:
 
         return item
         
-    def flush(self):
+    def get(self, metric_type, metric_id, **search_options):
         """
-        Flushes the internal batch queue to the server, regardless if the size limit has
-        been reached.
-
-        Numerics and availability data.. uh
-        """
-        """
-        if len(self._batch) > 0:
-            json_data = json.dumps(self._batch, indent=2)
-            self._post(self._get_metrics(MetricType.Numeric), json_data)
-            self._batch = []
-        """
-
-    def get(self, metric_type, metric_id, **kwargs):
-        """
-        Supported arguments are [optional]: start, end and buckets
+        Supported search options are [optional]: start, end and buckets
         """
         return self._get(
             self._get_metrics_data_url(
                 self._get_metrics_single_url(metric_type, metric_id)),
-            **kwargs)
+            **search_options)
 
-    def query_single_numeric(self, metric_id, **kwargs):
-        return self.get(MetricType.Numeric, metric_id, **kwargs)
+    def query_single_numeric(self, metric_id, **search_options):
+        return self.get(MetricType.Numeric, metric_id, **search_options)
 
-    def query_single_availability(self, metric_id, **kwargs):
-        return self.get(MetricType.Availability, metric_id, **kwargs)
+    def query_single_availability(self, metric_id, **search_options):
+        return self.get(MetricType.Availability, metric_id, **search_options)
     
     def query_metadata(self, query_type):
         """
@@ -228,6 +218,30 @@ class RHQMetricsClient:
         return self._get(metadata_url)
 
 
+    def create_metric_metadata(self, metric_id, metric_type, **kwargs):
+        item = { 'name': metric_id }
+        if len(kwargs) > 0:
+            # We have some arguments to pass..
+            data_retention = kwargs.pop('dataRetention')
+            if data_retention is not None:
+                item['dataRetention'] = data_retention
+
+            metadata = {}
+            for k, v in kwargs.items():
+                metadata[k] = v
+
+            if len(metadata) > 0:
+                item['tags'] = metadata
+
+        json_data = json.dumps(item, indent=2)
+        self._post(self._get_metrics_url(metric_type), json_data)
+
+    def create_numeric_metadata(self, metric_id, **options):
+        self.create_metric_metadata(metric_id, MetricType.Numeric, **options)
+
+    def create_availability_metadata(self, metric_id, **options):
+        self.create_metric_metadata(metric_id, MetricType.Availability, **options)
+        
     """
     Tenant related queries
     """

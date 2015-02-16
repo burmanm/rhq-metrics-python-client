@@ -41,20 +41,30 @@ class MetricsTestCase(TestMetricFunctionsBase):
     
     def test_numeric_creation(self):
         # Create numeric metric
+        self.client.create_numeric_metadata('test.create.numeric.1')
+        self.client.create_numeric_metadata('test.create.numeric.2', dataRetention=90)
+        self.client.create_numeric_metadata('test.create.numeric.3', dataRetention=90, units='bytes', env='qa')
         # Fetch metrics and check that it did appear
+        m = self.client.query_metadata(MetricType.Numeric)
+        self.assertEqual(3, len(m))
+        self.assertEqual('bytes', m[2]['tags']['units'])
         # Test with empty details and added details
-        self.fail("Not implemented")
 
     def test_availability_creation(self):
         # Create availability metric
         # Fetch mterics and check that it did appear
-        self.fail("Not implemented")
+        self.client.create_availability_metadata('test.create.avail.1')
+        self.client.create_availability_metadata('test.create.avail.2', dataRetention=90)
+        self.client.create_availability_metadata('test.create.avail.3', dataRetention=94, env='qa')
+        # Fetch metrics and check that it did appear
+        m = self.client.query_metadata(MetricType.Availability)        
+        self.assertEqual(3, len(m))
+        self.assertEqual(94, m[2]['dataRetention'])
 
     def test_update_metric(self):
-        # Create metric
-        # Update metric
-        # Fetch metric
-        # Test that metric is updated value
+        # Update previously created metric (from tests above)
+        # Fetch metrics
+        # Test that metric has an updated value
         self.fail('Not implemented')
         
     def test_add_numeric_single(self):
@@ -74,8 +84,8 @@ class MetricsTestCase(TestMetricFunctionsBase):
         self.assertEqual(down['data'][0]['value'], 'down')
 
     def test_add_numeric_multi(self):
-        metric1 = self.client.create_metric(float(1.45))
-        metric2 = self.client.create_metric(float(2.00), '1423734467561')
+        metric1 = self.client.create_metric_dict(float(1.45))
+        metric2 = self.client.create_metric_dict(float(2.00), (self.client._time_millis() - 2000))
 
         batch = []
         batch.append(metric1)
@@ -90,8 +100,8 @@ class MetricsTestCase(TestMetricFunctionsBase):
         self.assertEqual(datad[1]['value'], float(2.00))
 
     def test_add_availability_multi(self):
-        up = self.client.create_metric('up', '1423734467561')
-        down = self.client.create_metric('down')
+        up = self.client.create_metric_dict('up', (self.client._time_millis() - 2000))
+        down = self.client.create_metric_dict('down')
 
         batch = []
         batch.append(up)
