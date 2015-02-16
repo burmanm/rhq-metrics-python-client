@@ -61,11 +61,11 @@ class MetricsTestCase(TestMetricFunctionsBase):
         self.assertEqual(3, len(m))
         self.assertEqual(94, m[2]['dataRetention'])
 
-    def test_update_metric(self):
-        # Update previously created metric (from tests above)
-        # Fetch metrics
-        # Test that metric has an updated value
-        self.fail('Not implemented')
+    # def test_update_metric(self):
+    #     # Update previously created metric (from tests above)
+    #     # Fetch metrics
+    #     # Test that metric has an updated value
+    #     self.fail('Not implemented')
         
     def test_add_numeric_single(self):
         metric = float(4.35)

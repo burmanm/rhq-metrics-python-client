@@ -95,14 +95,9 @@ class RHQMetricsClient:
             # Finally, close
             res.close()
 
-        except urllib2.HTTPError, e:
-            print "Error, RHQ Metrics responded with http code: " + str(e.code)
-            raise RHQMetricsError(e)
-
-        except urllib2.URLError, e:
-            print"Error, could not send event(s) to the RHQ Metrics: " + str(e.reason)
-            raise RHQMetricsConnectionError(e)
-
+        except Exception as e:
+            self._handle_error(e)
+            
     def _get(self, url, **url_params):
         try:
             params = urllib.urlencode(url_params)
@@ -116,15 +111,20 @@ class RHQMetricsClient:
 
             res.close()
             return data
-        
-        except urllib2.HTTPError, e:
+
+        except Exception as e:
+            self._handle_error(e)
+
+    def _handle_error(self, e):
+        if isinstance(e, urllib2.HTTPError):
             print "Error, RHQ Metrics responded with http code: " + str(e.code)
             raise RHQMetricsError(e)
-
-        except urllib2.URLError, e:
+        elif isinstance(e, urllib2.URLError):
             print"Error, could not send event(s) to the RHQ Metrics: " + str(e.reason)
             raise RHQMetricsConnectionError(e)
-
+        else:
+            raise e
+        
     def _isfloat(self, value):
         try:
             float(value)
