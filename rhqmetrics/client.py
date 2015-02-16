@@ -186,6 +186,8 @@ class RHQMetricsClient:
         Query for metrics from the server. 
 
         Supported search options are [optional]: start, end and buckets
+
+        Use methods query_single_numeric and query_single_availability for simple access
         """
         return self._get(
             self._get_metrics_data_url(
@@ -193,9 +195,15 @@ class RHQMetricsClient:
             **search_options)
 
     def query_single_numeric(self, metric_id, **search_options):
+        """
+        See query_metrics
+        """
         return self.query_metric(MetricType.Numeric, metric_id, **search_options)
 
     def query_single_availability(self, metric_id, **search_options):
+        """
+        See query_metrics
+        """
         return self.query_metric(MetricType.Availability, metric_id, **search_options)
     
     def query_metadata(self, query_type):
@@ -209,16 +217,23 @@ class RHQMetricsClient:
         return self._get(metadata_url)
 
 
-    def create_metric_metadata(self, metric_id, metric_type, **kwargs):
+    def create_metric_metadata(self, metric_id, metric_type, **options):
+        """
+        Create metric definition with custom metadata. **options should be a set of tags, such as
+        units, env ..
+
+        Use methods create_numeric_metadata and create_availability_metadata to avoid using
+        MetricType.Numeric / MetricType.Availability
+        """
         item = { 'name': metric_id }
-        if len(kwargs) > 0:
+        if len(options) > 0:
             # We have some arguments to pass..
-            data_retention = kwargs.pop('dataRetention')
+            data_retention = options.pop('dataRetention')
             if data_retention is not None:
                 item['dataRetention'] = data_retention
 
             tags = {}
-            for k, v in kwargs.items():
+            for k, v in options.items():
                 tags[k] = v
 
             if len(tags) > 0:
@@ -228,9 +243,15 @@ class RHQMetricsClient:
         self._post(self._get_metrics_url(metric_type), json_data)
 
     def create_numeric_metadata(self, metric_id, **options):
+        """
+        See create_metric_metadata
+        """
         self.create_metric_metadata(metric_id, MetricType.Numeric, **options)
 
     def create_availability_metadata(self, metric_id, **options):
+        """
+        See create_metric_metadata
+        """
         self.create_metric_metadata(metric_id, MetricType.Availability, **options)
         
     """

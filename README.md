@@ -3,7 +3,7 @@ rhq-metrics-python-client
 
 ## Introduction
 
-Python client to access RHQ Metrics, an abstraction to invoke REST-methods on the server endpoint using urllib2.
+Python client to access Hawkular Metrics, an abstraction to invoke REST-methods on the server endpoint using urllib2. No external dependencies, works with Python 2.7 for now.
 
 ## Installation
 
@@ -15,22 +15,20 @@ To use rhq-metrics-python-client in your own program, after installation import 
 
 Timestamps should be in the milliseconds after epoch (created by the create() method automatically if not supplied) and value should be a float.
 
-Example:
+Example to push and fetch data numeric metric:
 
-```python
-import rhqmetrics import RHQMetricsClient
-
-def send_to_server(self):
-  r = rhqmetrics.RHQMetricsClient('localhost', '8080')
-  r.create(id, value)
+```
+>>> from rhqmetrics import *
+>>> client = RHQMetricsClient(tenant_id='test')
+>>> client.push('test.metric.1', 1.00)
+>>> m = client.query_single_numeric('test.metric.1')
+>>> print m['data'][0]['value']
+1.0
+>>>
 ```
 
-Larger example is available on example.py
-
-If you set batch_size to anything higher than 1, the client will not send events to the server until there's enough data to be sent. To force sending remaining items to the server, use flush(). To avoid having stale data for a long period, consider using a timer task to call flush() on certain intervals, as calling flush() will not do anything if there's no data to be sent.
-
-Note: current version if not thread safe, so calling put() and flush() at the same time from different threads is not safe.
+See client_test.py for more detailed examples.
 
 ## Method documentation
 
-Method documentatino is available with ``pydoc rhqmetrics``
+Method documentation is available with ``pydoc rhqmetrics``
