@@ -6,6 +6,7 @@ import time
 
 """
 TODO: Remember to do imports for Python 3 also and check the compatibility..
+TODO: Fix error handling to always throw our own exceptions
 """
 
 class MetricType:
@@ -25,32 +26,25 @@ class Availability:
 
 class RHQMetricsError(urllib2.HTTPError):
     pass
-
+        
 class RHQMetricsConnectionError(urllib2.URLError):
     pass
     
 class RHQMetricsClient:
     """
-    Creates new client for RHQ Metrics. If you intend to use the batching feature, remember to call
-    flush() on certain intervals to avoid data being stale on the client side for too long.
+    Creates new client for RHQ Metrics. As tenant_id, give intended tenant_id, even if it's not
+    created yet. Use one instance of RHQMetricsClient for each tenant.
     """
-
-    """
-    Availability data and numeric data can't be posted in the same call anymore..
-    So they should be separated
-    """
-    
     def __init__(self,
                  tenant_id,
                  host='localhost',
-                 port=8080,
-                 batch_size=1):
+                 port=8080):
         """
         A new instance of RHQMetricsClient is created with the following defaults:
 
         host = localhost
         port = 8080
-        batch_size = 1 (avoid batching)
+        tenant_id = tenant_id
 
         The url that is called by default is:
 
@@ -59,7 +53,6 @@ class RHQMetricsClient:
         self.tenant_id = tenant_id
         self.host = host
         self.port = port
-        self.batch_size = batch_size
 
     """
     Internal methods
@@ -118,10 +111,12 @@ class RHQMetricsClient:
     def _handle_error(self, e):
         if isinstance(e, urllib2.HTTPError):
             print "Error, RHQ Metrics responded with http code: " + str(e.code)
-            raise RHQMetricsError(e)
+            # Cast to RHQMetricsError
+            raise
         elif isinstance(e, urllib2.URLError):
             print"Error, could not send event(s) to the RHQ Metrics: " + str(e.reason)
-            raise RHQMetricsConnectionError(e)
+            # Cast to RHQMetricsConnectionError
+            raise
         else:
             raise e
         
@@ -132,6 +127,15 @@ class RHQMetricsClient:
         except ValueError:
             return False
             
+    def _create_metric_dict(self, value, timestamp=None):
+        if timestamp is None:
+            timestamp = self._time_millis()
+
+        item = { 'timestamp': timestamp,
+                 'value': value }
+
+        return item
+        
     """
     External methods
     """
@@ -158,12 +162,6 @@ class RHQMetricsClient:
         post_dict = [{ 'name': metric_id, 'data': batch }]        
         json_data = json.dumps(post_dict, indent=2)
         self._post(self._get_metrics_data_url(self._get_metrics_url(metric_type)), json_data)
-        """
-        Allow setting maximum interval between flushes:
-          - set up a timer task that does self._flush() after X seconds
-            - recreate new one
-          - If a batch size is met, reset that timer
-        """
 
     def push(self, metric_id, value, timestamp=None):
         """
@@ -171,29 +169,22 @@ class RHQMetricsClient:
         type of "Availability" or "up", "down" for availability metrics and otherwise
         a float type of for numerical values.
 
-        This method is assisting the put method by trying to detect what sort of
-        metric type is sent, as well as generating a timestamp.
+        This method is an assistant method for the put method by trying to detect what sort of
+        metric type is sent, as well as generating a timestamp if none is given.
         """
         if self._isfloat(value):
             metric_type = MetricType.Numeric
         else:
             metric_type = MetricType.Availability
 
-        item = self.create_metric_dict(value, timestamp)
+        item = self._create_metric_dict(value, timestamp)
 
         self.put(metric_type, metric_id, item)
 
-    def create_metric_dict(self, value, timestamp=None):
-        if timestamp is None:
-            timestamp = self._time_millis()
-
-        item = { 'timestamp': timestamp,
-                 'value': value }
-
-        return item
-        
-    def get(self, metric_type, metric_id, **search_options):
+    def query_metric(self, metric_type, metric_id, **search_options):
         """
+        Query for metrics from the server. 
+
         Supported search options are [optional]: start, end and buckets
         """
         return self._get(
@@ -202,10 +193,10 @@ class RHQMetricsClient:
             **search_options)
 
     def query_single_numeric(self, metric_id, **search_options):
-        return self.get(MetricType.Numeric, metric_id, **search_options)
+        return self.query_metric(MetricType.Numeric, metric_id, **search_options)
 
     def query_single_availability(self, metric_id, **search_options):
-        return self.get(MetricType.Availability, metric_id, **search_options)
+        return self.query_metric(MetricType.Availability, metric_id, **search_options)
     
     def query_metadata(self, query_type):
         """
@@ -226,12 +217,12 @@ class RHQMetricsClient:
             if data_retention is not None:
                 item['dataRetention'] = data_retention
 
-            metadata = {}
+            tags = {}
             for k, v in kwargs.items():
-                metadata[k] = v
+                tags[k] = v
 
-            if len(metadata) > 0:
-                item['tags'] = metadata
+            if len(tags) > 0:
+                item['tags'] = tags
 
         json_data = json.dumps(item, indent=2)
         self._post(self._get_metrics_url(metric_type), json_data)

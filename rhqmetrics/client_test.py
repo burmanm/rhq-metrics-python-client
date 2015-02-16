@@ -84,8 +84,8 @@ class MetricsTestCase(TestMetricFunctionsBase):
         self.assertEqual(down['data'][0]['value'], 'down')
 
     def test_add_numeric_multi(self):
-        metric1 = self.client.create_metric_dict(float(1.45))
-        metric2 = self.client.create_metric_dict(float(2.00), (self.client._time_millis() - 2000))
+        metric1 = self.client._create_metric_dict(float(1.45))
+        metric2 = self.client._create_metric_dict(float(2.00), (self.client._time_millis() - 2000))
 
         batch = []
         batch.append(metric1)
@@ -100,8 +100,8 @@ class MetricsTestCase(TestMetricFunctionsBase):
         self.assertEqual(datad[1]['value'], float(2.00))
 
     def test_add_availability_multi(self):
-        up = self.client.create_metric_dict('up', (self.client._time_millis() - 2000))
-        down = self.client.create_metric_dict('down')
+        up = self.client._create_metric_dict('up', (self.client._time_millis() - 2000))
+        down = self.client._create_metric_dict('down')
 
         batch = []
         batch.append(up)
