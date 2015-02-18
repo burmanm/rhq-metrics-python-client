@@ -111,12 +111,14 @@ class RHQMetricsClient:
     def _handle_error(self, e):
         if isinstance(e, urllib2.HTTPError):
             print "Error, RHQ Metrics responded with http code: " + str(e.code)
+            e.__class__ = RHQMetricsError
             # Cast to RHQMetricsError
-            raise
+            raise e
         elif isinstance(e, urllib2.URLError):
             print"Error, could not send event(s) to the RHQ Metrics: " + str(e.reason)
             # Cast to RHQMetricsConnectionError
-            raise
+            e.__class__ = RHQMetricsConnectionError
+            raise e
         else:
             raise e
         
