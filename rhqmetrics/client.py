@@ -128,15 +128,6 @@ class RHQMetricsClient:
             return True
         except ValueError:
             return False
-            
-    def _create_metric_dict(self, value, timestamp=None):
-        if timestamp is None:
-            timestamp = self._time_millis()
-
-        item = { 'timestamp': timestamp,
-                 'value': value }
-
-        return item
         
     """
     External methods
@@ -145,23 +136,48 @@ class RHQMetricsClient:
     """
     Metrics related methods
     """
+    def create_metric_dict(self, value, timestamp=None):
+        if timestamp is None:
+            timestamp = self._time_millis()
+
+        item = { 'timestamp': timestamp,
+                 'value': value }
+
+        return item
+
+    def create_data_dict(self, metric_id, metric_dict):
+        """
+        Create RHQ Metrics' submittable structure, metric_dict is a
+        dict created with create_metric_dict(value, timestamp)
+        """
+        if isinstance(metric_dict, list):
+            batch = metric_dict
+            # self._batch.extend(data)
+        else:
+            batch = []
+            batch.append(metric_dict)
+            # self._batch.append(data)
+
+        return { 'name': metric_id, 'data': batch }
+
+    def put_multi(self, metric_type, data):
+        """
+        Send multiple different metric_ids to the server in a single
+        batch.
+
+        data is a list of dicts created with create_data_dict(metric_id, metric_dict)
+        """
+        json_data = json.dumps(data, indent=2)
+        self._post(self._get_metrics_data_url(self._get_metrics_url(metric_type)), json_data)
 
     def put(self, metric_type, metric_id, data):
         """
-        Send datapoint(s) to the server.
+        Send single metric datapoint(s) to the server.
 
         data is a dict containing the keys: value, timestamp or a list
         of such dicts
         """
-        if isinstance(data, list):
-            batch = data
-            # self._batch.extend(data)
-        else:
-            batch = []
-            batch.append(data)
-            # self._batch.append(data)
-
-        post_dict = [{ 'name': metric_id, 'data': batch }]        
+        post_dict = [self.create_data_dict(metric_id, data)]
         json_data = json.dumps(post_dict, indent=2)
         self._post(self._get_metrics_data_url(self._get_metrics_url(metric_type)), json_data)
 
@@ -179,7 +195,7 @@ class RHQMetricsClient:
         else:
             metric_type = MetricType.Availability
 
-        item = self._create_metric_dict(value, timestamp)
+        item = self.create_metric_dict(value, timestamp)
 
         self.put(metric_type, metric_id, item)
 

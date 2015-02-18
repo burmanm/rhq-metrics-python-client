@@ -84,8 +84,8 @@ class MetricsTestCase(TestMetricFunctionsBase):
         self.assertEqual(down['data'][0]['value'], 'down')
 
     def test_add_numeric_multi(self):
-        metric1 = self.client._create_metric_dict(float(1.45))
-        metric2 = self.client._create_metric_dict(float(2.00), (self.client._time_millis() - 2000))
+        metric1 = self.client.create_metric_dict(float(1.45))
+        metric2 = self.client.create_metric_dict(float(2.00), (self.client._time_millis() - 2000))
 
         batch = []
         batch.append(metric1)
@@ -100,8 +100,8 @@ class MetricsTestCase(TestMetricFunctionsBase):
         self.assertEqual(datad[1]['value'], float(2.00))
 
     def test_add_availability_multi(self):
-        up = self.client._create_metric_dict('up', (self.client._time_millis() - 2000))
-        down = self.client._create_metric_dict('down')
+        up = self.client.create_metric_dict('up', (self.client._time_millis() - 2000))
+        down = self.client.create_metric_dict('down')
 
         batch = []
         batch.append(up)
@@ -114,6 +114,24 @@ class MetricsTestCase(TestMetricFunctionsBase):
         self.assertEqual(len(datad), 2)
         self.assertEqual(datad[0]['value'], 'down')
         self.assertEqual(datad[1]['value'], 'up')
-        
+
+    def test_add_multi(self):
+        metric1 = self.client.create_metric_dict(float(1.45))
+        metric1_2 = self.client.create_metric_dict(float(2.00), (self.client._time_millis() - 2000))
+
+        metric_multi = self.client.create_data_dict('test.multi.numeric.1', [metric1, metric1_2])
+
+        metric2 = self.client.create_metric_dict(float(1.55))
+        metric2_multi = self.client.create_data_dict('test.multi.numeric.2', [metric2])
+
+        self.client.put_multi(MetricType.Numeric, [metric_multi, metric2_multi])
+
+        # Check that both were added correctly..
+        metric1_data = self.client.query_single_numeric('test.multi.numeric.1')
+        metric2_data = self.client.query_single_numeric('test.multi.numeric.2')
+
+        self.assertEqual(2, len(metric1_data['data']))
+        self.assertEqual(1, len(metric2_data['data']))
+
 if __name__ == '__main__':
     unittest.main()
