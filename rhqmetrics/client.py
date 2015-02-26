@@ -6,7 +6,6 @@ import time
 
 """
 TODO: Remember to do imports for Python 3 also and check the compatibility..
-TODO: Fix error handling to always throw our own exceptions
 """
 
 class MetricType:
@@ -110,14 +109,22 @@ class RHQMetricsClient:
 
     def _handle_error(self, e):
         if isinstance(e, urllib2.HTTPError):
-            print "Error, RHQ Metrics responded with http code: " + str(e.code)
-            e.__class__ = RHQMetricsError
             # Cast to RHQMetricsError
+            e.__class__ = RHQMetricsError
+            err_json = e.read()
+
+            try:
+                err_d = json.loads(err_json)
+                e.msg = err_d['errorMsg']
+            except:
+                # We keep the original payload, couldn't parse it
+                e.msg = err_json
+
             raise e
         elif isinstance(e, urllib2.URLError):
-            print"Error, could not send event(s) to the RHQ Metrics: " + str(e.reason)
             # Cast to RHQMetricsConnectionError
             e.__class__ = RHQMetricsConnectionError
+            e.msg = "Error, could not send event(s) to the RHQ Metrics: " + str(e.reason)
             raise e
         else:
             raise e

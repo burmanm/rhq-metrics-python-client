@@ -40,15 +40,38 @@ class MetricsTestCase(TestMetricFunctionsBase):
     """
     
     def test_numeric_creation(self):
-        # Create numeric metric
+        """
+        Test creating numeric metric definitions with different tags and metadata.
+        """
+        # Create numeric metrics with empty details and added details
         self.client.create_numeric_metadata('test.create.numeric.1')
         self.client.create_numeric_metadata('test.create.numeric.2', dataRetention=90)
         self.client.create_numeric_metadata('test.create.numeric.3', dataRetention=90, units='bytes', env='qa')
-        # Fetch metrics and check that it did appear
+
+        # Fetch metrics metadata and check that the ones we created appeared also
         m = self.client.query_metadata(MetricType.Numeric)
         self.assertEqual(3, len(m))
+        self.assertEqual(self.test_tenant, m[0]['tenantId'])
         self.assertEqual('bytes', m[2]['tags']['units'])
-        # Test with empty details and added details
+
+        # This is what the returned dict should look like
+        expect = [
+            {'name': 'test.create.numeric.1',
+             'tenantId': self.test_tenant },
+            {'dataRetention': 90, 'name': 'test.create.numeric.2', 'tenantId': self.test_tenant},
+            {'tags': {'units': 'bytes', 'env': 'qa'},
+             'name': 'test.create.numeric.3', 'dataRetention': 90, 'tenantId': self.test_tenant}]
+
+        self.assertEqual(m, expect) # Did it?
+
+        # Lets try creating a duplicate metric
+        try:
+            self.client.create_numeric_metadata('test.create.numeric.1')
+            self.fail('Should have received an exception, metric with the same name was already created')
+        except RHQMetricsError, e:
+            # Check return code 400 and that the failure message was correctly parsed
+            self.assertEqual(400, e.code)
+            self.assertEqual('A metric with name [test.create.numeric.1] already exists', e.msg)
 
     def test_availability_creation(self):
         # Create availability metric

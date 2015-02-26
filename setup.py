@@ -3,7 +3,7 @@
 from distutils.core import setup
 
 setup(name='rhq-metrics-python-client',
-      version='0.2.2',      
+      version='0.2.3',
       description='Python client to communicate with Hawkular Metrics over HTTP',
       author='Michael Burman',
       author_email='miburman@redhat.com',
