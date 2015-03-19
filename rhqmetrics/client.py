@@ -58,7 +58,7 @@ class RHQMetricsClient:
     """
 
     def _get_base_url(self):
-        return "http://{0}:{1}/rhq-metrics/".format(self.host, str(self.port))
+        return "http://{0}:{1}/hawkular-metrics/".format(self.host, str(self.port))
     
     def _get_url(self, service):
         return self._get_base_url() + '{0}/{1}'.format(self.tenant_id, service)

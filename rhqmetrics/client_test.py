@@ -6,7 +6,7 @@ class TestMetricFunctionsBase(unittest.TestCase):
 
     def setUp(self):
         self.test_tenant = str(uuid.uuid4())
-        self.client = RHQMetricsClient(tenant_id=self.test_tenant)
+        self.client = RHQMetricsClient(tenant_id=self.test_tenant, port=8081)
         
 class TenantTestCase(TestMetricFunctionsBase):
     """
