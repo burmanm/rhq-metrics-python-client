@@ -47,7 +47,7 @@ class RHQMetricsClient:
 
         The url that is called by default is:
 
-        http://{host}:{port}/rhq-metrics/
+        http://{host}:{port}/hawkular-metrics/
         """
         self.tenant_id = tenant_id
         self.host = host
@@ -165,7 +165,7 @@ class RHQMetricsClient:
             batch.append(metric_dict)
             # self._batch.append(data)
 
-        return { 'name': metric_id, 'data': batch }
+        return { 'id': metric_id, 'data': batch }
 
     def put_multi(self, metric_type, data):
         """
@@ -250,7 +250,7 @@ class RHQMetricsClient:
         Use methods create_numeric_metadata and create_availability_metadata to avoid using
         MetricType.Numeric / MetricType.Availability
         """
-        item = { 'name': metric_id }
+        item = { 'id': metric_id }
         if len(options) > 0:
             # We have some arguments to pass..
             data_retention = options.pop('dataRetention')
@@ -289,20 +289,18 @@ class RHQMetricsClient:
         """
         return self._get(self._get_tenants_url())
 
-    def create_tenant(self, tenant_id, **retentions):
+    def create_tenant(self, tenant_id):
         """
-        Create a tenant. Give parameters availability and numeric to provide custom
-        retention times.
+        Create a tenant. Currently nothing can be set (to be fixed after the master
+        version of Hawkular-Metrics has fixed implementation.
         """        
-        avail_reten = retentions.get('availability')
-        num_reten = retentions.get('numeric')
-
         item = { 'id': tenant_id }
 
-        if avail_reten is not None and num_reten is not None:
-            retens = { 'availability': avail_reten,
-                       'numeric': num_reten }
-            item['retentions'] = retens
+        # if retention_time is not None:
+        #     item['dataRetention'] = retention_time
+
+        # if len(tags) > 0:
+        #     item.extend(tags)
 
         tenants_url = self._get_tenants_url()
         self._post(tenants_url, json.dumps(item, indent=2))

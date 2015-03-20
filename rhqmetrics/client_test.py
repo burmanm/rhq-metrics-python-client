@@ -19,16 +19,18 @@ class TenantTestCase(TestMetricFunctionsBase):
         self.client.create_tenant(tenant)
         tenants = self.client.query_tenants()
 
-        expect = { 'id': tenant, 'retentions': {} }
+        expect = { 'id': tenant }
         self.assertIn(expect, tenants)
         
-    def test_tenant_creation_with_retentions(self):
-        tenant = str(uuid.uuid4())
-        self.client.create_tenant(tenant, availability='40', numeric='50')
-        tenants = self.client.query_tenants()
+    def test_tenant_creation_with_retentions_and_aggregations(self):
+        # This feature isn't finished in the current master version of Hawkular-Metrics
+        pass
+        # tenant = str(uuid.uuid4())
+        # self.client.create_tenant(tenant, 40)
+        # tenants = self.client.query_tenants()
 
-        expect = { 'id': tenant, 'retentions': { 'availability': 40, 'numeric': 50 } }
-        self.assertIn(expect, tenants)
+        # expect = { 'id': tenant, 'dataRetention': 40 }
+        # self.assertIn(expect, tenants)
         
 class MetricsTestCase(TestMetricFunctionsBase):
     """
@@ -56,11 +58,11 @@ class MetricsTestCase(TestMetricFunctionsBase):
 
         # This is what the returned dict should look like
         expect = [
-            {'name': 'test.create.numeric.1',
+            {'id': 'test.create.numeric.1',
              'tenantId': self.test_tenant },
-            {'dataRetention': 90, 'name': 'test.create.numeric.2', 'tenantId': self.test_tenant},
+            {'dataRetention': 90, 'id': 'test.create.numeric.2', 'tenantId': self.test_tenant},
             {'tags': {'units': 'bytes', 'env': 'qa'},
-             'name': 'test.create.numeric.3', 'dataRetention': 90, 'tenantId': self.test_tenant}]
+             'id': 'test.create.numeric.3', 'dataRetention': 90, 'tenantId': self.test_tenant}]
 
         self.assertEqual(m, expect) # Did it?
 
@@ -70,7 +72,7 @@ class MetricsTestCase(TestMetricFunctionsBase):
             self.fail('Should have received an exception, metric with the same name was already created')
         except RHQMetricsError, e:
             # Check return code 400 and that the failure message was correctly parsed
-            self.assertEqual(400, e.code)
+            self.assertEqual(409, e.code)
             self.assertEqual('A metric with name [test.create.numeric.1] already exists', e.msg)
 
     def test_availability_creation(self):
@@ -89,22 +91,24 @@ class MetricsTestCase(TestMetricFunctionsBase):
     #     # Fetch metrics
     #     # Test that metric has an updated value
     #     self.fail('Not implemented')
+
+    # def test_delete_metric(self):
         
     def test_add_numeric_single(self):
         metric = float(4.35)
         self.client.push('test.numeric', metric)
         data = self.client.query_single_numeric('test.numeric')
-        self.assertEqual(float(data['data'][0]['value']), metric)
+        self.assertEqual(float(data[0]['value']), metric)
 
     def test_add_availability_single(self):
         self.client.push('test.avail.1', Availability.Up)
         self.client.push('test.avail.2', 'down')
 
         up = self.client.query_single_availability('test.avail.1')
-        self.assertEqual(up['data'][0]['value'], 'up')
+        self.assertEqual(up[0]['value'], 'up')
         
         down = self.client.query_single_availability('test.avail.2')
-        self.assertEqual(down['data'][0]['value'], 'down')
+        self.assertEqual(down[0]['value'], 'down')
 
     def test_add_numeric_multi(self):
         metric1 = self.client.create_metric_dict(float(1.45))
@@ -117,10 +121,9 @@ class MetricsTestCase(TestMetricFunctionsBase):
         self.client.put(MetricType.Numeric, 'test.numeric.multi', batch)
         data = self.client.query_single_numeric('test.numeric.multi')
 
-        datad = data['data']
-        self.assertEqual(len(datad), 2)
-        self.assertEqual(datad[0]['value'], float(1.45))
-        self.assertEqual(datad[1]['value'], float(2.00))
+        self.assertEqual(len(data), 2)
+        self.assertEqual(data[0]['value'], float(1.45))
+        self.assertEqual(data[1]['value'], float(2.00))
 
     def test_add_availability_multi(self):
         up = self.client.create_metric_dict('up', (self.client._time_millis() - 2000))
@@ -133,10 +136,9 @@ class MetricsTestCase(TestMetricFunctionsBase):
         self.client.put(MetricType.Availability, 'test.avail.multi', batch)
         data = self.client.query_single_availability('test.avail.multi')
 
-        datad = data['data']
-        self.assertEqual(len(datad), 2)
-        self.assertEqual(datad[0]['value'], 'down')
-        self.assertEqual(datad[1]['value'], 'up')
+        self.assertEqual(len(data), 2)
+        self.assertEqual(data[0]['value'], 'down')
+        self.assertEqual(data[1]['value'], 'up')
 
     def test_add_multi(self):
         metric1 = self.client.create_metric_dict(float(1.45))
@@ -153,8 +155,8 @@ class MetricsTestCase(TestMetricFunctionsBase):
         metric1_data = self.client.query_single_numeric('test.multi.numeric.1')
         metric2_data = self.client.query_single_numeric('test.multi.numeric.2')
 
-        self.assertEqual(2, len(metric1_data['data']))
-        self.assertEqual(1, len(metric2_data['data']))
+        self.assertEqual(2, len(metric1_data))
+        self.assertEqual(1, len(metric2_data))
 
 if __name__ == '__main__':
     unittest.main()
