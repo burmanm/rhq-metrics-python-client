@@ -21,7 +21,7 @@ class TenantTestCase(TestMetricFunctionsBase):
 
         expect = { 'id': tenant }
         self.assertIn(expect, tenants)
-        
+
     def test_tenant_creation_with_retentions_and_aggregations(self):
         # This feature isn't finished in the current master version of Hawkular-Metrics
         pass
@@ -34,24 +34,24 @@ class TenantTestCase(TestMetricFunctionsBase):
         
 class MetricsTestCase(TestMetricFunctionsBase):
     """
-    Test metric functionality, both adding metadata and querying for metadata, 
+    Test metric functionality, both adding definition and querying for definition, 
     as well as adding new numeric and availability metrics. 
 
-    Metric metadata creation should also test fetching the metadata, while
+    Metric definition creation should also test fetching the definition, while
     metric inserts should test also fetching the metric data.
     """
     
     def test_numeric_creation(self):
         """
-        Test creating numeric metric definitions with different tags and metadata.
+        Test creating numeric metric definitions with different tags and definition.
         """
         # Create numeric metrics with empty details and added details
-        self.client.create_numeric_metadata('test.create.numeric.1')
-        self.client.create_numeric_metadata('test.create.numeric.2', dataRetention=90)
-        self.client.create_numeric_metadata('test.create.numeric.3', dataRetention=90, units='bytes', env='qa')
+        self.client.create_numeric_definition('test.create.numeric.1')
+        self.client.create_numeric_definition('test.create.numeric.2', dataRetention=90)
+        self.client.create_numeric_definition('test.create.numeric.3', dataRetention=90, units='bytes', env='qa')
 
-        # Fetch metrics metadata and check that the ones we created appeared also
-        m = self.client.query_metadata(MetricType.Numeric)
+        # Fetch metrics definition and check that the ones we created appeared also
+        m = self.client.query_definitions(MetricType.Numeric)
         self.assertEqual(3, len(m))
         self.assertEqual(self.test_tenant, m[0]['tenantId'])
         self.assertEqual('bytes', m[2]['tags']['units'])
@@ -68,7 +68,7 @@ class MetricsTestCase(TestMetricFunctionsBase):
 
         # Lets try creating a duplicate metric
         try:
-            self.client.create_numeric_metadata('test.create.numeric.1')
+            self.client.create_numeric_definition('test.create.numeric.1')
             self.fail('Should have received an exception, metric with the same name was already created')
         except RHQMetricsError, e:
             # Check return code 400 and that the failure message was correctly parsed
@@ -78,14 +78,39 @@ class MetricsTestCase(TestMetricFunctionsBase):
     def test_availability_creation(self):
         # Create availability metric
         # Fetch mterics and check that it did appear
-        self.client.create_availability_metadata('test.create.avail.1')
-        self.client.create_availability_metadata('test.create.avail.2', dataRetention=90)
-        self.client.create_availability_metadata('test.create.avail.3', dataRetention=94, env='qa')
+        self.client.create_availability_definition('test.create.avail.1')
+        self.client.create_availability_definition('test.create.avail.2', dataRetention=90)
+        self.client.create_availability_definition('test.create.avail.3', dataRetention=94, env='qa')
         # Fetch metrics and check that it did appear
-        m = self.client.query_metadata(MetricType.Availability)        
+        m = self.client.query_definitions(MetricType.Availability)        
         self.assertEqual(3, len(m))
         self.assertEqual(94, m[2]['dataRetention'])
 
+    def test_tags_modifications(self):
+        m = 'test.create.tags.1'
+        # Create metric without tags
+        self.client.create_numeric_definition(m)
+        e = self.client.query_metric_tags(MetricType.Numeric, m)
+        self.assertEqual({}, e) # Should not be None
+
+        # Add tags
+        self.client.update_metric_tags(MetricType.Numeric, m, hostname='machine1', a='b')
+        # Fetch metric - check for tags
+        tags = self.client.query_metric_tags(MetricType.Numeric, m)
+        self.assertEqual(2, len(tags))
+        self.assertEqual("b", tags['a'])
+        # Delete some metric tags
+        self.client.delete_metric_tags(MetricType.Numeric, m, a='b', hostname='machine1')
+        # Fetch metric - check that tags were deleted
+        tags_2 = self.client.query_metric_tags(MetricType.Numeric, m)
+        self.assertEqual(0, len(tags_2))
+
+    def test_tags_finding(self):
+        pass
+        # Create metrics with tags
+        # Push some data to them
+        # Fetch data with certain tags
+        
     # def test_update_metric(self):
     #     # Update previously created metric (from tests above)
     #     # Fetch metrics
@@ -93,12 +118,28 @@ class MetricsTestCase(TestMetricFunctionsBase):
     #     self.fail('Not implemented')
 
     # def test_delete_metric(self):
-        
+
+    # def test_tags_behavior(self):
+    #     print 'START: TEST TAGS'
+    #     metric = float(1.2345)
+    #     print 'CREATE'
+    #     self.client.create_numeric_definition('test.numeric.single.tags.1', hostname='')
+    #     print 'POST'
+    #     self.client.push('test.numeric.single.tags.1', metric, hostname='localhost')
+    #     print 'GET'
+    #     data = self.client.query_single_numeric('test.numeric.single.tags.1')
+    #     print data
+    #     print 'END: TEST TAGS'
+    
     def test_add_numeric_single(self):
         metric = float(4.35)
-        self.client.push('test.numeric', metric)
-        data = self.client.query_single_numeric('test.numeric')
+        self.client.push('test.numeric./', metric)
+        data = self.client.query_single_numeric('test.numeric./')
         self.assertEqual(float(data[0]['value']), metric)
+
+        self.client.push('test.numeric.single.tags', metric, hostname='localhost')
+        data = self.client.query_single_numeric('test.numeric.single.tags')
+        # self.assertEqual(data[0]['tags']['localhost'], 'localhost')
 
     def test_add_availability_single(self):
         self.client.push('test.avail.1', Availability.Up)

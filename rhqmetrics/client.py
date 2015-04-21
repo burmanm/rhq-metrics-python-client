@@ -6,6 +6,7 @@ import time
 
 """
 TODO: Remember to do imports for Python 3 also and check the compatibility..
+TODO: Search datapoints with tags.. tag datapoints.
 """
 
 class MetricType:
@@ -28,7 +29,19 @@ class RHQMetricsError(urllib2.HTTPError):
         
 class RHQMetricsConnectionError(urllib2.URLError):
     pass
-    
+
+class HTTPErrorProcessor(urllib2.HTTPErrorProcessor):
+    """
+    Hawkular-Metrics uses http codes 201, 204
+    """
+    def http_response(self, request, response):
+
+        if response.code in [200, 201, 204]:
+            return response
+        return urllib2.HTTPErrorProcessor.http_response(self, request, response)
+  
+    https_response = http_response
+
 class RHQMetricsClient:
     """
     Creates new client for RHQ Metrics. As tenant_id, give intended tenant_id, even if it's not
@@ -53,9 +66,15 @@ class RHQMetricsClient:
         self.host = host
         self.port = port
 
+        opener = urllib2.build_opener(HTTPErrorProcessor())
+        urllib2.install_opener(opener)
+
     """
     Internal methods
     """
+
+    def _clean_metric_id(self, metric_id):
+        return urllib.quote(metric_id, '')
 
     def _get_base_url(self):
         return "http://{0}:{1}/hawkular-metrics/".format(self.host, str(self.port))
@@ -67,10 +86,13 @@ class RHQMetricsClient:
         return self._get_url('metrics') + "/{0}".format(metric_type)
 
     def _get_metrics_single_url(self, metric_type, metric_id):
-        return self._get_metrics_url(metric_type) + '/{0}'.format(metric_id)
+        return self._get_metrics_url(metric_type) + '/{0}'.format(self._clean_metric_id(metric_id))
     
     def _get_metrics_data_url(self, metrics_url):
         return metrics_url + '/data'
+
+    def _get_metrics_tags_url(self, metrics_url):
+        return metrics_url + '/tags'
 
     def _get_tenants_url(self):
         return self._get_base_url() + 'tenants'
@@ -78,35 +100,53 @@ class RHQMetricsClient:
     def _time_millis(self):
         return int(round(time.time() * 1000))
 
-    def _post(self, url, json_data):
+    def _http(self, url, method, data=None):
+        res = None
+
         try:
-            req = urllib2.Request(url=url, data=json_data)
+            req = urllib2.Request(url=url)
             req.add_header('Content-Type', 'application/json')
+
+            if isinstance(data, dict):
+                data = json.dumps(data, indent=2)
+
+            if data:
+                req.add_data(data)
+
+            req.get_method = lambda: method    
             res = urllib2.urlopen(req)
+            if method == 'GET':
+                if res.getcode() == 200:
+                    data = json.load(res)
+                    # return data
+                elif res.getcode() == 204:
+                    data = {}
 
-            # Finally, close
-            res.close()
+                return data
 
         except Exception as e:
             self._handle_error(e)
-            
+
+        finally:
+            if res:
+                res.close()        
+    
+    def _put(self, url, data):
+        self._http(url, 'PUT', data)
+
+    def _delete(self, url):
+        self._http(url, 'DELETE')    
+        
+    def _post(self, url, data):
+        self._http(url, 'POST', data)
+
     def _get(self, url, **url_params):
-        try:
-            params = urllib.urlencode(url_params)
-            if len(params) > 0:
-                url = url + params
-
-            req = urllib2.Request(url)                
-            req.add_header('Content-Type', 'application/json')
-            res = urllib2.urlopen(req)        
-            data = json.load(res)
-
-            res.close()
-            return data
-
-        except Exception as e:
-            self._handle_error(e)
-
+        params = urllib.urlencode(url_params)
+        if len(params) > 0:
+            url = url + params
+            
+        return self._http(url, 'GET')        
+        
     def _handle_error(self, e):
         if isinstance(e, urllib2.HTTPError):
             # Cast to RHQMetricsError
@@ -143,12 +183,15 @@ class RHQMetricsClient:
     """
     Metrics related methods
     """
-    def create_metric_dict(self, value, timestamp=None):
+    def create_metric_dict(self, value, timestamp=None, **tags):
         if timestamp is None:
             timestamp = self._time_millis()
 
         item = { 'timestamp': timestamp,
                  'value': value }
+
+        if tags is not None:
+            item['tags'] = tags
 
         return item
 
@@ -188,7 +231,7 @@ class RHQMetricsClient:
         json_data = json.dumps(post_dict, indent=2)
         self._post(self._get_metrics_data_url(self._get_metrics_url(metric_type)), json_data)
 
-    def push(self, metric_id, value, timestamp=None):
+    def push(self, metric_id, value, timestamp=None, **tags):
         """
         Creates new datapoint and sends to the server. Value should be
         type of "Availability" or "up", "down" for availability metrics and otherwise
@@ -202,7 +245,7 @@ class RHQMetricsClient:
         else:
             metric_type = MetricType.Availability
 
-        item = self.create_metric_dict(value, timestamp)
+        item = self.create_metric_dict(value, timestamp, **tags)
 
         self.put(metric_type, metric_id, item)
 
@@ -231,29 +274,33 @@ class RHQMetricsClient:
         """
         return self.query_metric(MetricType.Availability, metric_id, **search_options)
     
-    def query_metadata(self, query_type):
+    def query_definitions(self, query_type):
         """
-        Query available metric metadata. Use 'avail' or 'num' or MetricType.Availability / MetricType.Numeric
+        Query available metric definitions. Use 'avail' or 'num' or MetricType.Availability / MetricType.Numeric
         """
         if isinstance(query_type, MetricType):
             query_type = MetricType.short(query_type)
             
-        metadata_url = self._get_url('metrics') + '?type=' + MetricType.short(query_type)
-        return self._get(metadata_url)
+        definition_url = self._get_url('metrics') + '?type=' + MetricType.short(query_type)
+        return self._get(definition_url)
 
-
-    def create_metric_metadata(self, metric_id, metric_type, **options):
+    # def query_metric_definition(self, metric_type, metric_id):
+    #     # This is actually using the tags method because of weird behavior in HWKMETRICS
+    #     # TODO Fix this once Hawkular-Metrics is fixed.
+    #     pass
+    
+    def create_metric_definition(self, metric_id, metric_type, **options):
         """
-        Create metric definition with custom metadata. **options should be a set of tags, such as
+        Create metric definition with custom definition. **options should be a set of tags, such as
         units, env ..
 
-        Use methods create_numeric_metadata and create_availability_metadata to avoid using
+        Use methods create_numeric_definition and create_availability_definition to avoid using
         MetricType.Numeric / MetricType.Availability
         """
         item = { 'id': metric_id }
         if len(options) > 0:
             # We have some arguments to pass..
-            data_retention = options.pop('dataRetention')
+            data_retention = options.pop('dataRetention',None)
             if data_retention is not None:
                 item['dataRetention'] = data_retention
 
@@ -267,17 +314,49 @@ class RHQMetricsClient:
         json_data = json.dumps(item, indent=2)
         self._post(self._get_metrics_url(metric_type), json_data)
 
-    def create_numeric_metadata(self, metric_id, **options):
+    def create_numeric_definition(self, metric_id, **options):
         """
-        See create_metric_metadata
+        See create_metric_definition
         """
-        self.create_metric_metadata(metric_id, MetricType.Numeric, **options)
+        self.create_metric_definition(metric_id, MetricType.Numeric, **options)
 
-    def create_availability_metadata(self, metric_id, **options):
+    def create_availability_definition(self, metric_id, **options):
         """
-        See create_metric_metadata
+        See create_metric_definition
         """
-        self.create_metric_metadata(metric_id, MetricType.Availability, **options)
+        self.create_metric_definition(metric_id, MetricType.Availability, **options)
+        
+    def query_metric_tags(self, metric_type, metric_id):
+        # Slightly overlapping with query_definition, as that would return tags also.. 
+        # 200 ok, 204 ok, but nothing found
+        # @Path("/{tenantId}/metrics/numeric/{id}/tags")
+        definition = self._get(self._get_metrics_tags_url(self._get_metrics_single_url(metric_type, metric_id)))
+        return definition.get('tags', {})
+
+    def update_metric_tags(self, metric_type, metric_id, **tags):
+        # This will replace all the tags with PUT
+        self._put(self._get_metrics_tags_url(self._get_metrics_single_url(metric_type, metric_id)), tags)
+
+    def delete_metric_tags(self, metric_type, metric_id, **deleted_tags):
+        # 400 is tags are invalid
+        tags = ','.join("%s:%s" % (key,val) for (key,val) in deleted_tags.iteritems())
+        tags_url = self._get_metrics_tags_url(self._get_metrics_single_url(metric_type, metric_id)) + '/{0}'.format(tags)
+
+        self._delete(tags_url)
+
+    # def query_data_with_tags(self, metric_type, **tags):
+    #     # 400 if invalid tags, 204 is nothing found
+    #     pass
+
+    # def change_datapoint_tags(self, metric_type, metric_id, timestamp=None, start=None, end=None, **tags):
+    #     # TagRequest model.. mm?
+    #     pass
+    
+
+    # def query_metric_definitions_with_tag(self, metric_type, **tags):
+    #     # The description in Metrics REST-API is confusing, which one is datapoints and which one definions? Fix.
+    #     pass
+    
         
     """
     Tenant related queries
